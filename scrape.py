@@ -1,4 +1,6 @@
 import logging
+import signal
+import sys
 from time import time
 from requests import get
 import websocket
@@ -9,14 +11,12 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-def print_queries(q):
-  logger.debug("sql query: %s", q)
-
 sql = connect("/data/stonks.db")
 
 DC = "Light"
 WORLDS = {}
 ITEM_LAST_CHECKED = {}
+ws = None
 
 def setup_sqlite_tables():
   cur = sql.cursor()
@@ -117,14 +117,35 @@ def on_error(ws, error):
 def start_websocket_connection():
   ws = websocket.WebSocketApp("wss://universalis.app/api/ws",
                               on_open=subscribe_to_worlds,
-                              on_message=on_message)
+                              on_message=on_message,
+                              on_error=on_error)
   return ws
 
+def graceful_shutdown(signum, frame):
+  logger.info("Received signal %d, shutting down gracefully...", signum)
+  
+  if ws:
+    logger.info("Closing WebSocket connection...")
+    ws.close()
+  
+  if sql:
+    logger.info("Closing database connection...")
+    sql.close()
+  
+  logger.info("Shutdown complete")
+  sys.exit(0)
+
 if __name__ == '__main__':
+  signal.signal(signal.SIGINT, graceful_shutdown)
+  signal.signal(signal.SIGTERM, graceful_shutdown)
+  
   setup_sqlite_tables()
 
   WORLDS = get_worlds()
 
   ws = start_websocket_connection()
 
-  ws.run_forever()
+  try:
+    ws.run_forever()
+  except KeyboardInterrupt:
+    graceful_shutdown(signal.SIGINT, None)
