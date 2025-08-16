@@ -13,7 +13,6 @@ def print_queries(q):
   logger.debug("sql query: %s", q)
 
 sql = connect("/data/stonks.db")
-sql.set_trace_callback(print_queries)
 
 DC = "Light"
 WORLDS = {}
@@ -24,6 +23,7 @@ def setup_sqlite_tables():
   cur.execute("CREATE TABLE IF NOT EXISTS items (item_id INT PRIMARY KEY, item_name TEXT)")
   cur.execute("CREATE TABLE IF NOT EXISTS worlds (world_id INT PRIMARY KEY, world_name TEXT)")
   cur.execute("CREATE TABLE IF NOT EXISTS sales (timestamp INT, world_id INT, item_id INT, price INT, quantity INT, buyer TEXT, PRIMARY KEY (timestamp, item_id, price))")
+  cur.execute("CREATE INDEX IF NOT EXISTS idx_sales_timestamp ON sales (timestamp)")
 
   sql.commit()
 
