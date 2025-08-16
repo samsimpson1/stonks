@@ -1,10 +1,13 @@
-FROM alpine:3.21
-
-RUN apk update && apk add python3 py3-websocket-client py3-requests py3-mongo
+FROM ghcr.io/astral-sh/uv:0.8.11-alpine
 
 WORKDIR /app
 
-COPY requirements.txt /app/
-COPY scrape.py /app/
+COPY * .
 
-CMD ["sh", "-c", "python scrape.py"]
+RUN adduser -u 568 -D app && chown -R app /app
+
+USER app
+
+RUN uv sync --locked
+
+CMD ["uv", "run", "scrape.py"]
