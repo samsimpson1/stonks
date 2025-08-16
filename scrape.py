@@ -48,10 +48,16 @@ def store_item_name(item_id):
   res = cur.fetchone()
   if not res:
     xivapi_response = get(f"https://xivapi.com/item/{item_id_int}").json()
+    item_name = None
     if "Name_en" not in xivapi_response:
-      logger.error("Name_en not present in xivapi response: %s", xivapi_response)
-      return
-    item_name = xivapi_response["Name_en"]
+      if xivapi_response["ExCode"] == 404:
+        logger.info("Item not found in XIVAPI data: %s", item_id)
+        item_name = "Unknown Item %s" % item_id
+      else:
+        logger.error("Name_en not present in xivapi response for ID: %s", item_id)
+        return
+    else:
+      item_name = xivapi_response["Name_en"]
     cur.execute(
       "INSERT INTO items (item_id, item_name) VALUES (?, ?)",
       (item_id_int, item_name),
