@@ -47,10 +47,14 @@ def store_item_name(item_id):
   cur.execute("SELECT item_name FROM items WHERE item_id = ?", (item_id_int,))
   res = cur.fetchone()
   if not res:
-    xivapi_response = get(f"https://xivapi.com/item/{item_id_int}").json()["Name_en"]
+    xivapi_response = get(f"https://xivapi.com/item/{item_id_int}").json()
+    if "Name_en" not in xivapi_response:
+      logger.error("Name_en not present in xivapi response: %s", xivapi_response)
+      return
+    item_name = xivapi_response["Name_en"]
     cur.execute(
       "INSERT INTO items (item_id, item_name) VALUES (?, ?)",
-      (item_id_int, xivapi_response),
+      (item_id_int, item_name),
     )
     sql.commit()
 
