@@ -1,71 +1,20 @@
 import logging
 import signal
 import sys
-from time import time
+import os
 from requests import get
 import websocket
 from bson import encode, decode
-from sqlite3 import connect
+from database import StonksDatabase
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-sql = connect("/data/stonks.db")
-
 DC = "Light"
+db = None
 WORLDS = {}
-ITEM_LAST_CHECKED = {}
 ws = None
-
-
-def setup_sqlite_tables():
-  cur = sql.cursor()
-  cur.execute(
-    "CREATE TABLE IF NOT EXISTS items (item_id INT PRIMARY KEY, item_name TEXT)"
-  )
-  cur.execute(
-    "CREATE TABLE IF NOT EXISTS worlds (world_id INT PRIMARY KEY, world_name TEXT)"
-  )
-  cur.execute(
-    "CREATE TABLE IF NOT EXISTS sales (timestamp INT, world_id INT, item_id INT, price INT, quantity INT, buyer TEXT, PRIMARY KEY (timestamp, item_id, price))"
-  )
-  cur.execute("CREATE INDEX IF NOT EXISTS idx_sales_timestamp ON sales (timestamp)")
-  cur.execute("CREATE INDEX IF NOT EXISTS idx_sales_buyer_timestamp ON sales (buyer, timestamp)")
-
-  sql.commit()
-
-
-def store_item_name(item_id):
-  logger.debug("start store_item_name")
-  item_id_int = int(item_id)
-  if item_id_int in ITEM_LAST_CHECKED and ITEM_LAST_CHECKED[item_id_int] < (
-    time() + 30
-  ):
-    return
-  ITEM_LAST_CHECKED[item_id_int] = time()
-  cur = sql.cursor()
-  cur.execute("SELECT item_name FROM items WHERE item_id = ?", (item_id_int,))
-  res = cur.fetchone()
-  if not res:
-    xivapi_response = get(
-      f"https://v2.xivapi.com/api/sheet/Item/{item_id_int}?fields=Name&language=en"
-    ).json()
-    item_name = None
-    if "fields" not in xivapi_response:
-      if xivapi_response["code"] == 404:
-        logger.info("Item not found in XIVAPI data: %s", item_id)
-        item_name = "Unknown Item %s" % item_id
-      else:
-        logger.error("fields not present in xivapi response for ID: %s", item_id)
-        return
-    else:
-      item_name = xivapi_response["fields"]["Name"]
-    cur.execute(
-      "INSERT INTO items (item_id, item_name) VALUES (?, ?)",
-      (item_id_int, item_name),
-    )
-    sql.commit()
 
 
 def find_world_in_list(worlds, id):
@@ -75,8 +24,6 @@ def find_world_in_list(worlds, id):
 
 
 def get_worlds():
-  cur = sql.cursor()
-
   dc_worlds = []
   dc_list = get("https://universalis.app/api/v2/data-centers").json()
 
@@ -96,12 +43,7 @@ def get_worlds():
 
   for world in dc_worlds:
     worlds[world] = find_world_in_list(world_list, world)
-    cur.execute(
-      "INSERT INTO worlds (world_id, world_name) VALUES (?, ?) ON CONFLICT DO NOTHING",
-      (world, worlds[world]),
-    )
-
-  sql.commit()
+    db.insert_world(world, worlds[world])
 
   return worlds
 
@@ -113,25 +55,10 @@ def process_sale(item_id, world_id, sale):
   buyer = sale["buyerName"]
   logger.debug("process_sale world_id %i item_id %i", world_id, item_id)
   world_name = WORLDS[world_id]
-  store_item_name(item_id)
+  db.store_item_name(item_id)
 
-  time_last_week = time() - (60 * 60 * 24 * 7)  # time - 7 days
-  if timestamp < time_last_week:
-    logger.debug(
-      "item sale timestamp too old: item_id %s timestamp %s", item_id, timestamp
-    )
-    return
-
-  logger.info("world id %i world name %s", world_id, world_name)
-
-  cur = sql.cursor()
-  cur.execute(
-    """
-  INSERT INTO sales (timestamp, world_id, item_id, price, quantity, buyer) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING
-  """,
-    (timestamp, world_id, item_id, price, quantity, buyer),
-  )
-  sql.commit()
+  if db.insert_sale(timestamp, world_id, item_id, price, quantity, buyer):
+    logger.info("world id %i world name %s", world_id, world_name)
 
 
 def subscribe_to_worlds(ws):
@@ -169,19 +96,23 @@ def graceful_shutdown(signum, frame):
     logger.info("Closing WebSocket connection...")
     ws.close()
 
-  if sql:
-    logger.info("Closing database connection...")
-    sql.close()
+  if db:
+    db.close()
 
   logger.info("Shutdown complete")
   sys.exit(0)
 
 
-if __name__ == "__main__":
+def main(db_path=None):
+  global db, WORLDS, ws
+  
+  if db_path is None:
+    db_path = os.getenv("DB_PATH", "/data/stonks.db")
+  
+  db = StonksDatabase(db_path)
+  
   signal.signal(signal.SIGINT, graceful_shutdown)
   signal.signal(signal.SIGTERM, graceful_shutdown)
-
-  setup_sqlite_tables()
 
   WORLDS = get_worlds()
 
@@ -191,3 +122,7 @@ if __name__ == "__main__":
     ws.run_forever()
   except KeyboardInterrupt:
     graceful_shutdown(signal.SIGINT, None)
+
+
+if __name__ == "__main__":
+  main()
