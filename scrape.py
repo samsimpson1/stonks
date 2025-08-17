@@ -47,17 +47,19 @@ def store_item_name(item_id):
   cur.execute("SELECT item_name FROM items WHERE item_id = ?", (item_id_int,))
   res = cur.fetchone()
   if not res:
-    xivapi_response = get(f"https://xivapi.com/item/{item_id_int}").json()
+    xivapi_response = get(
+      f"https://v2.xivapi.com/api/sheet/Item/{item_id_int}?fields=Name&language=en"
+    ).json()
     item_name = None
-    if "Name_en" not in xivapi_response:
-      if xivapi_response["ExCode"] == 404:
+    if "fields" not in xivapi_response:
+      if xivapi_response["code"] == 404:
         logger.info("Item not found in XIVAPI data: %s", item_id)
         item_name = "Unknown Item %s" % item_id
       else:
-        logger.error("Name_en not present in xivapi response for ID: %s", item_id)
+        logger.error("fields not present in xivapi response for ID: %s", item_id)
         return
     else:
-      item_name = xivapi_response["Name_en"]
+      item_name = xivapi_response["fields"]["Name"]
     cur.execute(
       "INSERT INTO items (item_id, item_name) VALUES (?, ?)",
       (item_id_int, item_name),
