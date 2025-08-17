@@ -31,6 +31,7 @@ def setup_sqlite_tables():
     "CREATE TABLE IF NOT EXISTS sales (timestamp INT, world_id INT, item_id INT, price INT, quantity INT, buyer TEXT, PRIMARY KEY (timestamp, item_id, price))"
   )
   cur.execute("CREATE INDEX IF NOT EXISTS idx_sales_timestamp ON sales (timestamp)")
+  cur.execute("CREATE INDEX IF NOT EXISTS idx_sales_buyer_timestamp ON sales (buyer, timestamp)")
 
   sql.commit()
 
