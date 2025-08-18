@@ -105,12 +105,12 @@ def graceful_shutdown(signum, frame):
 
 def main(db_path=None):
   global db, WORLDS, ws
-  
+
   if db_path is None:
     db_path = os.getenv("DB_PATH", "/data/stonks.db")
-  
+
   db = StonksDatabase(db_path)
-  
+
   signal.signal(signal.SIGINT, graceful_shutdown)
   signal.signal(signal.SIGTERM, graceful_shutdown)
 
