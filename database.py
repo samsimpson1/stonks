@@ -55,6 +55,8 @@ class StonksDatabase:
 
   def setup_tables(self):
     cur = self.connection.cursor()
+    cur.execute("PRAGMA journal_mode=WAL")
+    cur.execute("PRAGMA synchronous=NORMAL")
     cur.execute(
       "CREATE TABLE IF NOT EXISTS items (item_id INT PRIMARY KEY, item_name TEXT)"
     )
