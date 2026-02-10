@@ -5,6 +5,7 @@ import os
 from requests import get
 import websocket
 from bson import encode, decode
+from prometheus_client import Counter, start_http_server
 from database import StonksDatabase
 
 logging.basicConfig()
@@ -12,9 +13,23 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 DC = "Light"
+METRICS_PORT = int(os.getenv("METRICS_PORT", "9100"))
 db = None
 WORLDS = {}
 ws = None
+
+sales_received = Counter(
+  "stonks_sales_received_total",
+  "Total sales received from WebSocket",
+)
+ws_messages_received = Counter(
+  "stonks_ws_messages_received_total",
+  "WebSocket messages received",
+)
+ws_errors = Counter(
+  "stonks_ws_errors_total",
+  "WebSocket errors encountered",
+)
 
 
 def find_world_in_list(worlds, id):
@@ -68,14 +83,17 @@ def subscribe_to_worlds(ws):
 
 
 def on_message(ws, message):
+  ws_messages_received.inc()
   sales = decode(message)
   item_id = sales["item"]
   world_id = sales["world"]
   for sale in sales["sales"]:
+    sales_received.inc()
     process_sale(item_id, world_id, sale)
 
 
 def on_error(ws, error):
+  ws_errors.inc()
   logger.error(error)
 
 
@@ -110,6 +128,9 @@ def main(db_path=None):
     db_path = os.getenv("DB_PATH", "/data/stonks.db")
 
   db = StonksDatabase(db_path)
+
+  start_http_server(METRICS_PORT)
+  logger.info("Prometheus metrics server started on port %d", METRICS_PORT)
 
   signal.signal(signal.SIGINT, graceful_shutdown)
   signal.signal(signal.SIGTERM, graceful_shutdown)

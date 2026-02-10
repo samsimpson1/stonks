@@ -10,4 +10,6 @@ USER app
 
 RUN uv sync --locked
 
+EXPOSE 9100
+
 CMD ["uv", "run", "scrape.py"]

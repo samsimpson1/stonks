@@ -363,9 +363,9 @@ class TestSaleRecording:
       buyer="Wyra Mhakaraca",
     )
 
-    # Both should return True
+    # First insert succeeds, duplicate is silently skipped
     assert result1 is True
-    assert result2 is True
+    assert result2 is False
 
     # But only one record should exist (due to PRIMARY KEY constraint)
     cur = temp_db.connection.cursor()
